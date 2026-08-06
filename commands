@@ -1,0 +1,18 @@
+cd SIFT_matching
+python extract_digit_templates.py --num-templates 2
+# one video:
+python extract_digit_templates.py --video Eli_1772247537.mov --steps
+# exact 20 only:
+python extract_digit_templates.py --strict
+
+
+python feature_match.py --video Mujahir_step1_1782111905.mov
+python feature_match.py --video Eli_step1_1781296597.mov
+python feature_match.py --video Nicolette_step1_1782144750.mov
+python feature_match.py --video Asad_step_1_1782101102.mov
+python feature_match.py --video Ken_step1_1782161577.mov
+
+
+
+
+

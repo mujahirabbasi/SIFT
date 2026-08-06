@@ -1,0 +1,65 @@
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+W0000 00:00:1782276420.570678   20388 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276420.615790   28900 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276420.871604   20388 landmark_projection_calculator.cc:186] Using NORM_RECT without IMAGE_DIMENSIONS is only supported for the square ROI. Provide IMAGE_DIMENSIONS or use PROJECTION_MATRIX.
+W0000 00:00:1782276438.471388   21712 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276438.500588   21712 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276456.066079    2140 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276456.102341   27192 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276473.234174   26536 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276473.269887   28264 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276491.829649   22756 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276491.866559   30668 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276508.409236   28376 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276508.434272   28376 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276532.097206   28180 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276532.134038   28180 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276550.044088   25064 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276550.073222   14768 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276566.598485   27912 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276566.637362   31364 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276583.172740   30792 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276583.208367   30792 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276601.877521   31280 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276601.911251   28528 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276619.980556   29664 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1782276620.016327   29664 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+Found 12 video(s). Output -> C:\Users\katsh\Desktop\Pixel_Matching\output
+Processing Asif_1772331766.mov...
+  Asif_1772331766.mov: 30 frames (30 with hand)
+  Done: Asif_1772331766.mov -> C:\Users\katsh\Desktop\Pixel_Matching\output\Asif_1772331766 (47/47 frames with hand)
+Processing Eli_1772247537.mov...
+  Eli_1772247537.mov: 30 frames (30 with hand)
+  Done: Eli_1772247537.mov -> C:\Users\katsh\Desktop\Pixel_Matching\output\Eli_1772247537 (47/47 frames with hand)
+Processing Jaipal_1772600513.mov...
+  Jaipal_1772600513.mov: 30 frames (30 with hand)
+  Done: Jaipal_1772600513.mov -> C:\Users\katsh\Desktop\Pixel_Matching\output\Jaipal_1772600513 (46/46 frames with hand)
+Processing Ken_1772816715.mov...
+  Ken_1772816715.mov: 30 frames (30 with hand)
+  Done: Ken_1772816715.mov -> C:\Users\katsh\Desktop\Pixel_Matching\output\Ken_1772816715 (47/47 frames with hand)
+Processing Md_1772258488.mov...
+  Md_1772258488.mov: 30 frames (30 with hand)
+  Done: Md_1772258488.mov -> C:\Users\katsh\Desktop\Pixel_Matching\output\Md_1772258488 (47/47 frames with hand)
+Processing Moussa_1772501558.mov...
+  Moussa_1772501558.mov: 30 frames (30 with hand)
+  Moussa_1772501558.mov: 60 frames (60 with hand)
+  Done: Moussa_1772501558.mov -> C:\Users\katsh\Desktop\Pixel_Matching\output\Moussa_1772501558 (63/63 frames with hand)
+Processing Mujahir_1772227836.mov...
+  Mujahir_1772227836.mov: 30 frames (30 with hand)
+  Done: Mujahir_1772227836.mov -> C:\Users\katsh\Desktop\Pixel_Matching\output\Mujahir_1772227836 (47/47 frames with hand)
+Processing Nicolette_1772663463.mov...
+  Nicolette_1772663463.mov: 30 frames (30 with hand)
+  Done: Nicolette_1772663463.mov -> C:\Users\katsh\Desktop\Pixel_Matching\output\Nicolette_1772663463 (45/45 frames with hand)
+Processing Nikhil_1772686896.mov...
+  Nikhil_1772686896.mov: 30 frames (30 with hand)
+  Done: Nikhil_1772686896.mov -> C:\Users\katsh\Desktop\Pixel_Matching\output\Nikhil_1772686896 (47/47 frames with hand)
+Processing Rehan_1772416808.mov...
+  Rehan_1772416808.mov: 30 frames (30 with hand)
+  Done: Rehan_1772416808.mov -> C:\Users\katsh\Desktop\Pixel_Matching\output\Rehan_1772416808 (47/47 frames with hand)
+Processing Saurabh_1772695546.mov...
+  Saurabh_1772695546.mov: 30 frames (30 with hand)
+  Done: Saurabh_1772695546.mov -> C:\Users\katsh\Desktop\Pixel_Matching\output\Saurabh_1772695546 (46/46 frames with hand)
+Processing Usman_1772418210.mov...
+  Usman_1772418210.mov: 30 frames (30 with hand)
+  Done: Usman_1772418210.mov -> C:\Users\katsh\Desktop\Pixel_Matching\output\Usman_1772418210 (47/47 frames with hand)
