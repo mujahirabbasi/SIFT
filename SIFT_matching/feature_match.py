@@ -151,10 +151,20 @@ class SIFTMatcher:
                 good.append(match_a)
         return good
 
-    def score_from_good_matches(self, good_match_count: int) -> float:
-        if good_match_count < self.min_good_matches:
+    def score_from_matches(
+        self,
+        matched_count: int,
+        num_kp_a: int,
+        num_kp_b: int,
+    ) -> float:
+        """
+        SIFT score = matched keypoints / min(keypoints in A, keypoints in B).
+        Clamped to [0, 1].
+        """
+        denom = min(int(num_kp_a), int(num_kp_b))
+        if denom <= 0 or matched_count <= 0:
             return 0.0
-        return min(1.0, good_match_count / max(1, self.target_good_matches))
+        return float(min(1.0, matched_count / denom))
 
     def match_pair(
         self,
@@ -168,7 +178,7 @@ class SIFTMatcher:
         kp_b = kp_b or []
         good = self.good_matches(kp_a, des_a, kp_b, des_b)
         return MatchResult(
-            score=self.score_from_good_matches(len(good)),
+            score=self.score_from_matches(len(good), len(kp_a), len(kp_b)),
             kp_query=kp_a,
             kp_ref=kp_b,
             good_matches=good,
@@ -790,6 +800,7 @@ def run_realtime_matching(
     max_pattern_distance: int = DEFAULT_MAX_PATTERN_DISTANCE,
     min_query_scored_frames: int = MIN_QUERY_SCORED_FRAMES,
     max_query_scored_frames: int = MAX_QUERY_SCORED_FRAMES,
+    show_gui: bool = True,
 ) -> list[FrameMatchResult]:
     references = sample_reference_frames(identity_dir, num_reference_frames, seed=seed)
     matcher = SIFTMatcher(
@@ -826,9 +837,8 @@ def run_realtime_matching(
         f"sigma={sift_sigma}"
     )
     print(
-        f"Match scoring: Lowe ratio only (no RANSAC) "
-        f"minGood={min_good_matches} targetGood={target_good_matches} "
-        f"(palm ROI mask — no black-background keypoints)"
+        f"Match scoring: Lowe good / min(kp_query, kp_ref) "
+        f"(ratio={matcher.ratio_threshold}, palm ROI mask)"
     )
     print(
         f"Query frames scored: min {min_query_scored_frames}, "
@@ -836,9 +846,15 @@ def run_realtime_matching(
     )
     if sample_dir is not None:
         print(f"Saving evaluation images -> {sample_dir}")
-    print("Press 'q' or ESC to stop.\n")
-
-    cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+    if show_gui:
+        print("Press 'q' or ESC to stop.\n")
+        try:
+            cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
+        except cv2.error:
+            print("OpenCV GUI unavailable; continuing headless.\n")
+            show_gui = False
+    else:
+        print("Headless mode (no preview window).\n")
 
     ref_by_name = {ref.name: ref for ref in references}
 
@@ -922,21 +938,23 @@ def run_realtime_matching(
                     f"(crease gate fail, L1 too high)"
                 )
 
-            display = build_display(
-                frame, crops if gate_ok else None, result, identity, references,
-                match_threshold, frame_idx,
-            )
-            cv2.imshow(WINDOW_NAME, display)
+            if show_gui:
+                display = build_display(
+                    frame, crops if gate_ok else None, result, identity, references,
+                    match_threshold, frame_idx,
+                )
+                cv2.imshow(WINDOW_NAME, display)
 
-            key = cv2.waitKey(delay_ms) & 0xFF
-            if key in (ord("q"), 27):
-                print("Stopped by user.")
-                break
+                key = cv2.waitKey(delay_ms) & 0xFF
+                if key in (ord("q"), 27):
+                    print("Stopped by user.")
+                    break
 
             frame_idx += 1
 
     cap.release()
-    cv2.destroyAllWindows()
+    if show_gui:
+        cv2.destroyAllWindows()
 
     if sample_dir is not None and best_pack is not None:
         best_dir = save_best_match_package(
@@ -1068,7 +1086,9 @@ def plot_identity_scores(
         print("No match-count data to plot; skipping keypoints graph.")
         plt.close(fig_kp)
 
-    plt.show()
+    plt.show(block=False)
+    plt.pause(0.5)
+    plt.close("all")
 
 
 def score_processed_images(
@@ -1234,6 +1254,11 @@ def main() -> None:
         help="Lowe good-match count that maps to score 1.0",
     )
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH)
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Skip OpenCV preview window (required when highgui is unavailable).",
+    )
     args = parser.parse_args()
 
     if (args.image_a is None) ^ (args.image_b is None):
@@ -1306,6 +1331,7 @@ def main() -> None:
             max_pattern_distance=args.max_distance,
             min_query_scored_frames=args.min_query_frames,
             max_query_scored_frames=args.max_query_frames,
+            show_gui=not args.headless,
         )
         avg_best_score, verdict = print_summary(results, args.threshold)
         summaries.append(
