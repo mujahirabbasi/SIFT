@@ -1,9 +1,8 @@
 """
 SIFT-match palm crops against stored reference images.
 
-Query and reference use the same crease-gated palm pipeline from
-digit_preprocessing (resize → MediaPipe → RGB crease quality gate →
-CLAHE/emboss → upright → palm crop).
+Query and reference use the same palm pipeline from digit_preprocessing
+(resize → MediaPipe → finger joint boxes debug → CLAHE/emboss → upright → palm crop).
 
 Videos are read from test_videos/ by default. References default to digit_output/.
 Displays scores in real time and plots per-frame score + keypoint counts.
@@ -25,7 +24,6 @@ from digit_preprocessing import (
     DigitCrops,
     DigitPreprocessor,
     ensure_model,
-    passes_crease_gate_tolerant,
 )
 from hand_preprocessing import (
     CROP_NAMES,
@@ -39,7 +37,8 @@ DEFAULT_REFERENCE_ROOT = Path(__file__).resolve().parent / "digit_output"
 WINDOW_NAME = "SIFT Matching"
 PRIORITY_REFERENCE_FRAMES = ("frame_40", "frame_41", "frame_42")
 MIN_REFERENCE_FRAME = 1
-MIN_QUERY_FRAME = 1
+# Score query frames only after this 1-based index; take up to 5 palms.
+MIN_QUERY_FRAME = 35
 MIN_QUERY_SCORED_FRAMES = 3
 MAX_QUERY_SCORED_FRAMES = 5
 DEFAULT_ROTATE_DEG = 90
@@ -827,7 +826,7 @@ def run_realtime_matching(
     print(f"Reference frames: {', '.join(r.name for r in references)}")
     print(
         "Query preprocess: digit_preprocessing "
-        f"(crease gate L1<={max_pattern_distance}, rotate={rotate_deg})"
+        f"(no crease gate, frames after {MIN_QUERY_FRAME}, rotate={rotate_deg})"
     )
     print(
         f"SIFT settings: nfeatures={sift_nfeatures} "
@@ -871,22 +870,14 @@ def run_realtime_matching(
                 break
 
             frame = rotate_frame_bgr(frame, rotate_deg)
-            crops = preprocessor.process_frame(
-                frame, fps=fps, max_l1_distance=max_pattern_distance,
-            )
+            crops = preprocessor.process_frame(frame, fps=fps)
             result: FrameMatchResult | None = None
             current_frame_no = frame_idx + 1
 
-            gate_ok = (
-                crops is not None
-                and crops.all_present()
-                and passes_crease_gate_tolerant(
-                    crops.crease_counts,
-                    max_l1_distance=max_pattern_distance,
-                )
-            )
+            palm_ok = crops is not None and crops.all_present()
+            score_ok = palm_ok and current_frame_no > MIN_QUERY_FRAME
 
-            if gate_ok and current_frame_no >= MIN_QUERY_FRAME:
+            if score_ok:
                 query_label = f"frame_{current_frame_no}/palm.png"
                 print(f"frame {current_frame_no:>3}:")
                 result = match_frame_to_references(
@@ -930,17 +921,14 @@ def run_realtime_matching(
                     f" kp={result.num_kp_query}/{result.num_kp_ref}"
                     f" lowe={result.num_good_matches}"
                 )
+            elif current_frame_no <= MIN_QUERY_FRAME:
+                pass  # warm-up / early frames; keep MediaPipe tracking
             elif crops is None or not crops.all_present():
                 print(f"frame {current_frame_no:>3}: no hand / no palm")
-            else:
-                print(
-                    f"frame {current_frame_no:>3}: skipped "
-                    f"(crease gate fail, L1 too high)"
-                )
 
             if show_gui:
                 display = build_display(
-                    frame, crops if gate_ok else None, result, identity, references,
+                    frame, crops if score_ok else None, result, identity, references,
                     match_threshold, frame_idx,
                 )
                 cv2.imshow(WINDOW_NAME, display)
@@ -1197,19 +1185,19 @@ def main() -> None:
         "--max-distance",
         type=int,
         default=DEFAULT_MAX_PATTERN_DISTANCE,
-        help="Crease-gate max L1 distance (must match enrollment, default 4).",
+        help="Ignored (crease gate removed; kept for CLI compatibility).",
     )
     parser.add_argument(
         "--min-query-frames",
         type=int,
         default=MIN_QUERY_SCORED_FRAMES,
-        help="Warn if fewer than this many crease-gated query frames are scored (default: 3).",
+        help="Warn if fewer than this many query frames are scored (default: 3).",
     )
     parser.add_argument(
         "--max-query-frames",
         type=int,
         default=MAX_QUERY_SCORED_FRAMES,
-        help="Stop after scoring this many crease-gated query frames (default: 5).",
+        help="Stop after scoring this many query frames after frame 35 (default: 5).",
     )
     parser.add_argument(
         "--sift-nfeatures",

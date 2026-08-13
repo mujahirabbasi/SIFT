@@ -1,19 +1,18 @@
 """
-Extract crease-gated palm reference templates from hand videos.
+Extract palm reference templates from hand videos.
 
 Uses digit_preprocessing:
-  resize → MediaPipe → RGB crease quality gate [1,2,2 top→bottom × 4] → CLAHE/emboss → upright → palm crop
+  rotate → resize → MediaPipe → draw finger joint boxes (debug only) →
+  CLAHE → emboss → upright → palm crop
 
-Crease detection is only a contrast/quality check (not saved).
-Saved templates are palm.png — same palm area as the shared palm pipeline.
-
-By default checks every frame and saves the 2 closest to the crease pattern.
+No crease quality gate. By default picks 2 random frames with a palm after frame 30.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import random
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,25 +21,18 @@ import numpy as np
 
 from digit_preprocessing import (
     DEFAULT_MODEL_PATH,
-    EXPECTED_CREASE_PATTERN,
     DigitCrops,
     DigitPreprocessor,
     ensure_model,
-    pattern_l1_distance,
-    passes_crease_gate,
-    passes_crease_gate_tolerant,
     save_pipeline_steps,
-    total_crease_count,
 )
 from hand_preprocessing import rotate_frame_bgr
 
 VIDEO_EXTENSIONS = {".mov", ".mp4", ".avi", ".mkv", ".webm"}
 DEFAULT_NUM_TEMPLATES = 2
 DEFAULT_ROTATE_DEG = 90
-# 0 = consider every frame (no early-frame skip).
-DEFAULT_MIN_FRAME = 0
-# Canny/Hough rarely hits exact [1,2,2]×4; allow small jitter unless --strict.
-DEFAULT_MAX_PATTERN_DISTANCE = 4
+# Only frames after this 1-based index are eligible for templates.
+DEFAULT_MIN_FRAME = 30
 
 
 @dataclass
@@ -48,8 +40,6 @@ class Candidate:
     frame_no: int
     crops: DigitCrops
     steps: dict[str, np.ndarray]
-    distance: int
-    total_creases: int
 
 
 def process_video(
@@ -61,15 +51,13 @@ def process_video(
     max_frames: int | None = None,
     min_frame: int = DEFAULT_MIN_FRAME,
     rotate_deg: int = DEFAULT_ROTATE_DEG,
-    max_pattern_distance: int = DEFAULT_MAX_PATTERN_DISTANCE,
     save_steps: bool = False,
+    seed: int | None = None,
 ) -> list[dict]:
     """
-    Scan video, rank frames by crease-pattern distance, save best num_templates.
+    Scan video, collect palm frames after min_frame, randomly save num_templates.
 
-    All frames are considered when min_frame=0 (default). If min_frame > 0,
-    only frames with frame_no > min_frame are eligible; earlier frames are
-    still fed to MediaPipe for tracking continuity.
+    Earlier frames are still fed to MediaPipe for tracking continuity.
     """
     video_stem = video_path.stem
     output_dir = output_root / video_stem
@@ -83,7 +71,6 @@ def process_video(
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     frame_idx = 0
     candidates: list[Candidate] = []
-    num_candidates = 0
 
     with DigitPreprocessor.create(model_path, mode="video") as preprocessor:
         while True:
@@ -100,35 +87,27 @@ def process_video(
             )
             frame_idx += 1
 
-            # Optional early-frame skip (min_frame=0 → check every frame).
-            if min_frame > 0 and frame_no <= min_frame:
+            if frame_no <= min_frame:
                 continue
-
             if crops is None or not crops.all_present():
                 continue
 
-            counts = crops.crease_counts
-            if not passes_crease_gate_tolerant(
-                counts, max_l1_distance=max_pattern_distance,
-            ):
-                continue
-
-            num_candidates += 1
             candidates.append(
                 Candidate(
                     frame_no=frame_no,
                     crops=crops,
                     steps=steps if save_steps else {},
-                    distance=pattern_l1_distance(counts),
-                    total_creases=total_crease_count(counts),
                 )
             )
-            # Prefer exact / closer pattern matches; keep only best so far.
-            candidates.sort(key=lambda c: (c.distance, c.frame_no))
-            del candidates[num_templates:]
 
     cap.release()
-    selected = candidates
+
+    rng = random.Random(seed)
+    if len(candidates) <= num_templates:
+        selected = candidates
+    else:
+        selected = rng.sample(candidates, k=num_templates)
+    selected.sort(key=lambda c: c.frame_no)
 
     saved: list[dict] = []
     for cand in selected:
@@ -136,15 +115,13 @@ def process_video(
         if not cand.crops.save(frame_folder):
             continue
 
-        counts = cand.crops.crease_counts
         meta = {
             "frame": cand.frame_no,
-            "crease_counts": {k: list(v) for k, v in counts.items()},
-            "total_creases": cand.total_creases,
-            "pattern_l1_distance": cand.distance,
-            "exact_gate": passes_crease_gate(counts),
-            "pattern": list(EXPECTED_CREASE_PATTERN),
-            "max_pattern_distance": max_pattern_distance,
+            "crease_counts": {
+                k: list(v) for k, v in cand.crops.crease_counts.items()
+            },
+            "selection": "random_after_min_frame",
+            "min_frame": min_frame,
         }
         with open(frame_folder / "crease_meta.json", "w", encoding="utf-8") as f:
             json.dump(meta, f, indent=2)
@@ -157,28 +134,27 @@ def process_video(
         saved.append(meta)
         print(
             f"  Saved template {len(saved)}/{num_templates}: "
-            f"frame_{cand.frame_no} "
-            f"(L1={cand.distance}, creases={cand.total_creases}, "
-            f"exact={meta['exact_gate']}, counts={counts})"
+            f"frame_{cand.frame_no} (counts={cand.crops.crease_counts})"
         )
 
     summary = {
         "video": video_path.name,
         "num_requested": num_templates,
-        "num_candidates": num_candidates,
+        "num_candidates": len(candidates),
         "num_saved": len(saved),
         "min_frame": min_frame,
-        "max_pattern_distance": max_pattern_distance,
+        "selection": "random",
+        "seed": seed,
         "templates": saved,
-        "pipeline": "digit_v4_crease_gate_palm",
-        "expected_pattern_top_to_bottom": list(EXPECTED_CREASE_PATTERN),
+        "pipeline": "digit_v5_boxes_no_gate",
     }
     with open(output_dir / "templates_summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
 
     print(
         f"  Done: {video_path.name} -> {output_dir} "
-        f"({len(saved)}/{num_templates} templates from {num_candidates} candidates)"
+        f"({len(saved)}/{num_templates} templates from {len(candidates)} "
+        f"eligible frames after {min_frame})"
     )
     return saved
 
@@ -194,14 +170,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Extract palm templates from videos. "
-            "Crease detection on RGB after resize (quality/contrast gate only). "
-            "Expected pattern per finger top→bottom: [1, 2, 2]. Saves palm.png."
+            "No crease gate — picks random frames with a palm after --min-frame. "
+            "Finger joint boxes are still drawn in --steps debug images. Saves palm.png."
         ),
         epilog=(
             "Examples:\n"
             "  python extract_digit_templates.py --num-templates 2\n"
             "  python extract_digit_templates.py --video Eli_1772247537.mov --steps\n"
-            "  python extract_digit_templates.py --strict"
+            "  python extract_digit_templates.py --min-frame 30 --seed 0"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -223,7 +199,7 @@ def main() -> None:
         default=DEFAULT_MIN_FRAME,
         help=(
             "Only consider frames after this 1-based index "
-            f"(default: {DEFAULT_MIN_FRAME} = every frame)."
+            f"(default: {DEFAULT_MIN_FRAME})."
         ),
     )
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH)
@@ -240,18 +216,10 @@ def main() -> None:
         help="Decode orientation rotate in degrees (default: 90 for iOS .mov).",
     )
     parser.add_argument(
-        "--max-distance",
+        "--seed",
         type=int,
-        default=DEFAULT_MAX_PATTERN_DISTANCE,
-        help=(
-            "Max L1 distance from [1,2,2]×4 to accept a frame "
-            f"(default: {DEFAULT_MAX_PATTERN_DISTANCE}). 0 = exact only."
-        ),
-    )
-    parser.add_argument(
-        "--strict",
-        action="store_true",
-        help="Require exact [1,2,2] on all four fingers (same as --max-distance 0).",
+        default=None,
+        help="RNG seed for random frame selection (default: nondeterministic).",
     )
     parser.add_argument(
         "--steps",
@@ -260,7 +228,6 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    max_distance = 0 if args.strict else args.max_distance
     videos_dir = args.videos_dir.resolve()
     output_root = args.output_dir.resolve()
     output_root.mkdir(parents=True, exist_ok=True)
@@ -273,10 +240,8 @@ def main() -> None:
 
     print(
         f"Found {len(videos)} video(s). "
-        f"Target pattern: {EXPECTED_CREASE_PATTERN} × 4 fingers. "
-        f"Max L1 distance: {max_distance}. "
-        f"Min frame: {'all' if args.min_frame <= 0 else f'>{args.min_frame}'}. "
-        f"Templates/video: {args.num_templates}. Output -> {output_root}"
+        f"Selection: {args.num_templates} random palm frame(s) after frame "
+        f"{args.min_frame}. Output -> {output_root}"
     )
     for video_path in videos:
         if not video_path.exists():
@@ -291,8 +256,8 @@ def main() -> None:
             max_frames=args.max_frames,
             min_frame=args.min_frame,
             rotate_deg=args.rotate,
-            max_pattern_distance=max_distance,
             save_steps=args.steps,
+            seed=args.seed,
         )
 
 

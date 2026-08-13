@@ -1,18 +1,17 @@
 """
-Crease-gated palm preprocessing for SIFT templates.
+Crease-box palm preprocessing for SIFT templates.
 
-Same core path as palm preprocessing, with one RGB-only quality check after resize:
+Same core path as palm preprocessing, with finger joint boxes drawn for debug:
   1) optional decode-orientation rotate (iOS .mov)
   2) resize min-side 256 (keep aspect)
   3) MediaPipe hand landmarks
-  4) finger crease detect on RGB  ← contrast/quality gate only ([1, 2, 2] top→bottom × 4)
+  4) finger joint boxes drawn on RGB (debug overlay only; no quality gate)
   5) CLAHE
   6) emboss
   7) upright (wrist → middle finger up)
   8) palm polygon crop
 
-Creases are not cropped or saved — they only decide whether the frame’s
-contrast is good enough. Saved templates are palm.png (same as palm pipeline).
+Joint boxes are not used to accept/reject frames. Saved templates are palm.png.
 """
 
 from __future__ import annotations
@@ -40,7 +39,7 @@ from hand_preprocessing import (
     upright_hand_image,
 )
 
-PIPELINE_VERSION = "digit_v4_crease_gate_palm"
+PIPELINE_VERSION = "digit_v5_boxes_no_gate"
 
 # Top → bottom joint boxes: DIP–TIP, PIP–DIP, MCP–PIP
 EXPECTED_CREASE_PATTERN = (1, 2, 2)
@@ -67,7 +66,7 @@ class CreaseConfig:
 
 @dataclass
 class DigitCrops:
-    """Palm crop (BGR) after crease quality gate + shared palm pipeline."""
+    """Palm crop (BGR) after shared palm pipeline. Crease boxes are debug-only."""
 
     palm: np.ndarray | None = None
     crease_counts: dict[str, tuple[int, int, int]] = field(default_factory=dict)
@@ -333,17 +332,17 @@ def extract_digit_crops_with_steps(
 ) -> tuple[DigitCrops, dict[str, np.ndarray]]:
     """
     Full path after resize→landmarks.
-    Crease gate on RGB (quality/contrast only), then palm crop like hand_preprocessing.
+    Draw finger joint boxes on RGB (debug), then palm crop like hand_preprocessing.
+    No crease quality gate — frame_passed_gate is True whenever a palm is built.
     """
     steps: dict[str, np.ndarray] = {
         "step1_resized": resized_rgb_bgr.copy(),
     }
 
     counts = count_all_finger_creases(resized_rgb_bgr, pts, crease)
-    steps["step2_crease_rgb"] = draw_crease_debug(resized_rgb_bgr, pts, counts, crease)
-    gate_ok = passes_crease_gate(counts)
+    steps["step2_crease_boxes"] = draw_crease_debug(resized_rgb_bgr, pts, counts, crease)
 
-    crops = DigitCrops(crease_counts=counts, frame_passed_gate=gate_ok)
+    crops = DigitCrops(crease_counts=counts, frame_passed_gate=False)
 
     filtered = apply_filters(resized_rgb_bgr, preprocess)
     steps["step3_clahe_emboss"] = filtered.copy()
@@ -355,6 +354,7 @@ def extract_digit_crops_with_steps(
     palm = crop_palm_polygon(upright, polygon)
     if palm is not None:
         crops.palm = palm
+        crops.frame_passed_gate = True
         steps["step5_palm_crop"] = palm.copy()
 
     return crops, steps
@@ -362,7 +362,7 @@ def extract_digit_crops_with_steps(
 
 @dataclass
 class DigitPreprocessor:
-    """Detect hand, crease quality-gate, return palm crop."""
+    """Detect hand, draw finger joint boxes (debug), return palm crop."""
 
     landmarker: HandLandmarker
     preprocess: PreprocessConfig = field(default_factory=PreprocessConfig)
@@ -437,12 +437,13 @@ class DigitPreprocessor:
         max_l1_distance: int | None = None,
     ) -> DigitCrops | tuple[DigitCrops, dict[str, np.ndarray]] | None:
         """
-        Resize → MediaPipe → RGB crease quality gate → CLAHE/emboss → upright → palm crop.
+        Resize → MediaPipe → draw finger joint boxes → CLAHE/emboss → upright → palm crop.
 
         Returns None when no hand. Palm is built when a hand is present.
-        frame_passed_gate reflects crease contrast quality ([1,2,2]×4 exact,
-        or tolerant if max_l1_distance is set).
+        frame_passed_gate is True when a palm crop exists (no crease gate).
+        max_l1_distance is ignored (kept for call-site compatibility).
         """
+        _ = max_l1_distance
         resized = resize_frame(frame_bgr, self.preprocess.frame_min_side)
         landmarks_list = self._detect(resized, fps=fps)
         if not landmarks_list:
@@ -453,10 +454,6 @@ class DigitPreprocessor:
         crops, steps = extract_digit_crops_with_steps(
             resized, pts, self.preprocess, self.crease,
         )
-        if max_l1_distance is not None:
-            crops.frame_passed_gate = passes_crease_gate_tolerant(
-                crops.crease_counts, max_l1_distance=max_l1_distance,
-            )
         if return_steps:
             return crops, steps
         return crops
@@ -473,16 +470,14 @@ def process_bgr_to_digit_crops(
     """
     Single entry for reference + query palm templates.
 
-    Same pipeline as enrollment. Crease detection is quality-only;
-    saved/returned crop is palm.png. max_l1_distance=0 requires exact
-    [1,2,2]×4; use the same value as enrollment (e.g. 4) for query gating.
+    Same pipeline as enrollment. Finger joint boxes are debug-only;
+    saved/returned crop is palm.png. max_l1_distance is ignored.
     """
+    _ = max_l1_distance
     frame = rotate_frame_bgr(frame_bgr, rotate_deg)
     path = ensure_model(model_path or DEFAULT_MODEL_PATH)
     with DigitPreprocessor.create(path, mode="image", crease=crease) as preprocessor:
-        return preprocessor.process_frame(
-            frame, max_l1_distance=max_l1_distance,
-        )
+        return preprocessor.process_frame(frame)
 
 
 def save_pipeline_steps(steps_dir: Path, steps: dict[str, np.ndarray]) -> None:
