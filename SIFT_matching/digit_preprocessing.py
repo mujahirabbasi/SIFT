@@ -9,7 +9,7 @@ Same core path as palm preprocessing, with one RGB-only quality check after resi
   5) CLAHE
   6) emboss
   7) upright (wrist → middle finger up)
-  8) palm polygon crop + finalize CLAHE
+  8) palm polygon crop
 
 Creases are not cropped or saved — they only decide whether the frame’s
 contrast is good enough. Saved templates are palm.png (same as palm pipeline).
@@ -33,7 +33,6 @@ from hand_preprocessing import (
     apply_filters,
     crop_palm_polygon,
     ensure_model,
-    finalize_palm_crop,
     get_palm_polygon,
     landmarks_to_pixels,
     resize_frame,
@@ -41,7 +40,7 @@ from hand_preprocessing import (
     upright_hand_image,
 )
 
-PIPELINE_VERSION = "digit_v3_crease_gate_palm"
+PIPELINE_VERSION = "digit_v4_crease_gate_palm"
 
 # Top → bottom joint boxes: DIP–TIP, PIP–DIP, MCP–PIP
 EXPECTED_CREASE_PATTERN = (1, 2, 2)
@@ -355,7 +354,6 @@ def extract_digit_crops_with_steps(
     polygon = get_palm_polygon(pts_u)
     palm = crop_palm_polygon(upright, polygon)
     if palm is not None:
-        palm = finalize_palm_crop(palm, preprocess)
         crops.palm = palm
         steps["step5_palm_crop"] = palm.copy()
 

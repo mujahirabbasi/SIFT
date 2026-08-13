@@ -170,7 +170,7 @@ def process_video(
         "min_frame": min_frame,
         "max_pattern_distance": max_pattern_distance,
         "templates": saved,
-        "pipeline": "digit_v2_crease_gate_palm",
+        "pipeline": "digit_v4_crease_gate_palm",
         "expected_pattern_top_to_bottom": list(EXPECTED_CREASE_PATTERN),
     }
     with open(output_dir / "templates_summary.json", "w", encoding="utf-8") as f:

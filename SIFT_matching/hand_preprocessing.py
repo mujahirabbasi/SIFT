@@ -9,7 +9,6 @@ Pipeline per frame (PIPELINE_VERSION):
   5) emboss
   6) upright (wrist → middle finger up)
   7) palm polygon crop
-  8) CLAHE on crop (consistent saved palm.png for query + reference)
 
 Import process_bgr_to_hand_crops() from app code — do not fork this path.
 """
@@ -28,7 +27,7 @@ from mediapipe.tasks.python import BaseOptions
 from mediapipe.tasks.python.vision import HandLandmarker, HandLandmarkerOptions, RunningMode
 
 # Bump when enroll/backfill must be re-run for matching compatibility
-PIPELINE_VERSION = "palm_v3_clahe_emboss_upright"
+PIPELINE_VERSION = "palm_v4_clahe_emboss_upright"
 
 CROP_NAMES = ("palm",)
 FRAME_MIN_SIDE = 256
@@ -196,15 +195,6 @@ def apply_filters(image_bgr: np.ndarray, config: PreprocessConfig) -> np.ndarray
     return apply_emboss(normalized)
 
 
-def finalize_palm_crop(crop_bgr: np.ndarray, config: PreprocessConfig) -> np.ndarray:
-    """Final CLAHE on the palm crop so saved query/reference PNGs match visually."""
-    return apply_clahe_bgr(
-        crop_bgr,
-        clip_limit=config.clahe_clip_limit,
-        tile_size=max(2, config.clahe_tile_size // 2),
-    )
-
-
 def draw_landmarks_and_palm(
     image_bgr: np.ndarray,
     pts: np.ndarray,
@@ -254,14 +244,11 @@ def extract_palm_crop(
     all_pts: np.ndarray,
     config: PreprocessConfig,
 ) -> np.ndarray | None:
-    """CLAHE → emboss → upright → polygon crop → finalize CLAHE."""
+    """CLAHE → emboss → upright → polygon crop."""
     filtered = apply_filters(resized, config)
     upright, pts = upright_hand_image(filtered, all_pts)
     polygon = get_palm_polygon(pts)
-    crop = crop_palm_polygon(upright, polygon)
-    if crop is None:
-        return None
-    return finalize_palm_crop(crop, config)
+    return crop_palm_polygon(upright, polygon)
 
 
 def extract_palm_crop_with_steps(
@@ -293,9 +280,8 @@ def extract_palm_crop_with_steps(
     if crop is None:
         return None, steps
 
-    final = finalize_palm_crop(crop, config)
-    steps["step6_palm_crop"] = final.copy()
-    return final, steps
+    steps["step6_palm_crop"] = crop.copy()
+    return crop, steps
 
 
 def save_pipeline_steps(steps_dir: Path, steps: dict[str, np.ndarray]) -> None:
